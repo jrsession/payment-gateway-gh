@@ -1,9 +1,23 @@
-system_id: "APP-001"
-name: "Payment Gateway"
-business_owner: "jane.doe@company.com"
-technical_owner: "payments-platform"
-data_classification: "internal"
-criticality: "medium"
-regulatory_scope: "hipaa"
-internet_facing: true
-profile: "auto"
+application:
+  system_id: "APP-001"
+  name: "Payment Gateway"
+  business_owner: "jane.doe@company.com"
+  technical_owner: "payments-platform"
+  business_unit: "Finance"
+  data_classification: "Internal"
+  internet_facing: true
+  regulatory_scope:
+    - HIPAA
+  criticality: "Medium"
+  lifecycle_state: "Active"
+
+security:
+  profile: "auto"
+
+delivery:
+  default_branch: "main"
+  ci_platform: "github-actions"
+
+ownership:
+  team_alias: "payments-platform"
+  support_email: "payments@company.com"
