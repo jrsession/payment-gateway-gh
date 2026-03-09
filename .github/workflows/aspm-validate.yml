@@ -1,0 +1,82 @@
+# .github/workflows/aspm-validate.yml
+# Add this file to any GitHub repository that has a .security/application.yaml
+# to automatically validate security metadata on push/PR to main.
+#
+# Prerequisites:
+#   - ASPM API must be accessible from GitHub Actions runner
+#   - Repository must have .security/application.yaml
+
+name: ASPM Security Metadata Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      ASPM_API_URL: 'https://aspm-api.azurewebsites.net'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check YAML file exists
+        run: |
+          if [ ! -f ".security/application.yaml" ]; then
+            echo "::error::.security/application.yaml not found in repository root"
+            echo "::error::Create this file following the ASPM schema"
+            exit 1
+          fi
+          echo "Found .security/application.yaml"
+
+      - name: Validate against ASPM
+        run: |
+          YAML_CONTENT=$(cat .security/application.yaml)
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+
+          echo "Validating .security/application.yaml against ASPM..."
+          echo "Repository: $REPO_URL"
+          echo ""
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "$ASPM_API_URL/api/validation/repository" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg repoUrl "$REPO_URL" \
+              --arg yamlContent "$YAML_CONTENT" \
+              --arg source "PullRequest" \
+              '{repoUrl: $repoUrl, yamlContent: $yamlContent, source: $source}')")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::error::ASPM API returned HTTP $HTTP_CODE"
+            echo "$BODY" | jq -r '.errors[]? // empty' 2>/dev/null | while read err; do
+              echo "::error::$err"
+            done
+            exit 1
+          fi
+
+          STATUS=$(echo "$BODY" | jq -r '.data.status' 2>/dev/null)
+
+          if [ "$STATUS" = "Passed" ]; then
+            SYSTEM_ID=$(echo "$BODY" | jq -r '.data.systemId // "unknown"')
+            echo "## ASPM Validation PASSED ✅" >> $GITHUB_STEP_SUMMARY
+            echo "System ID: $SYSTEM_ID" >> $GITHUB_STEP_SUMMARY
+            echo "All security metadata matches CMDB source of truth." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ASPM Validation FAILED ❌" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Validation Errors" >> $GITHUB_STEP_SUMMARY
+            echo "$BODY" | jq -r '.data.errors[]? | "- **[\(.code)]** \(.field): \(.message)"' 2>/dev/null >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Fix the errors in \`.security/application.yaml\` and push again." >> $GITHUB_STEP_SUMMARY
+
+            echo "::error::ASPM Validation FAILED"
+            echo "$BODY" | jq -r '.data.errors[]? | "::error::[\(.code)] \(.field): \(.message)"' 2>/dev/null
+            exit 1
+          fi
