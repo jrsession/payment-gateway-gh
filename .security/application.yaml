@@ -1,0 +1,9 @@
+system_id: "APP-001"
+name: "Payment Gateway"
+business_owner: "jane.doe@company.com"
+technical_owner: "payments-platform"
+data_classification: "internal"
+criticality: "medium"
+regulatory_scope: "hipaa"
+internet_facing: true
+profile: "auto"
